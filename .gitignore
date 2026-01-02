@@ -7,3 +7,9 @@ __pycache__/
 data/
 outputs/
 uploads/
+
+# local backups
+*.bak
+
+# local backups
+*.bak
