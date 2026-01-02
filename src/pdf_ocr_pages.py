@@ -30,10 +30,6 @@ def ocr_page_image(
     model_name: str = "gemini-2.5-flash",
     max_chars: int = 8000,
 ) -> str:
-    """
-    페이지 PNG 1장을 Gemini에 넣어 OCR + 문서이해 텍스트로 반환.
-    (표/차트 숫자 포함 요청)
-    """
     with open(image_path, "rb") as f:
         img_bytes = f.read()
 
@@ -57,64 +53,6 @@ def ocr_page_image(
     return text[:max_chars]
 
 
-def ocr_pdf_all_pages(
-    client,
-    pdf_path: str,
-    cache_dir: str,
-    dpi: int = 220,
-    model_name: str = "gemini-2.5-flash",
-    reocr: bool = False,
-    max_chars_per_page: int = 8000,
-) -> list[dict]:
-    """
-    강제 OCR 파이프라인:
-    PDF → 페이지 PNG → 각 페이지 OCR → [{"page":n,"text":...}] 반환
-    캐시: cache_dir/pages/p001.txt 존재하면 재호출 안 함 (reocr=True면 무시)
-
-    페이지 단위로 예외가 나더라도 전체 파이프라인이 멈추지 않도록 방어.
-    실패한 페이지는 pNNN.txt에 "[OCR_ERROR] ..."로 기록하고, cache_dir/ocr_errors.log에 누적.
-    """
-    pages_dir = os.path.join(cache_dir, "pages")
-    os.makedirs(pages_dir, exist_ok=True)
-
-    image_paths = pdf_to_page_pngs(pdf_path, pages_dir, dpi=dpi)
-
-    err_log = os.path.join(cache_dir, "ocr_errors.log")
-
-    out_pages = []
-    for idx, img_path in enumerate(image_paths):
-        page_no = idx + 1
-        txt_path = os.path.join(pages_dir, f"p{page_no:03d}.txt")
-
-        try:
-            if (not reocr) and os.path.exists(txt_path):
-                with open(txt_path, "r", encoding="utf-8") as f:
-                    txt = f.read()
-            else:
-                txt = ocr_page_image_with_timeout(
-                    client=client,
-                    image_path=img_path,
-                    page_no=page_no,
-                    model_name=model_name,
-                    max_chars=max_chars_per_page,
-                    timeout_sec=90,
-                )
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(txt)
-
-        except Exception as e:
-            msg = f"[OCR_ERROR] page={page_no} file={os.path.basename(img_path)} err={type(e).__name__}: {e}"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(msg)
-            with open(err_log, "a", encoding="utf-8") as f:
-                f.write(msg + "\n")
-            txt = msg
-
-        out_pages.append({"page": page_no, "text": txt})
-
-    return out_pages
-
-
 def ocr_page_image_with_timeout(
     client,
     image_path: str,
@@ -124,8 +62,8 @@ def ocr_page_image_with_timeout(
     timeout_sec: int = 90,
 ) -> str:
     """
-    ocr_page_image를 별도 스레드에서 실행하고, timeout을 넘기면 TimeoutError를 발생시킨다.
-    (네트워크/SDK가 블로킹될 때 전체 파이프라인이 멈추는 것을 방지)
+    ocr_page_image를 별도 스레드에서 실행하고, timeout을 넘기면 TimeoutError 발생.
+    SDK/네트워크 블로킹으로 전체 파이프라인이 멈추는 것을 방지.
     """
     result = {"text": None, "err": None}
 
@@ -152,3 +90,101 @@ def ocr_page_image_with_timeout(
         raise result["err"]
 
     return result["text"] or ""
+
+
+def ocr_pdf_all_pages(
+    client,
+    pdf_path: str,
+    cache_dir: str,
+    dpi: int = 220,
+    model_name: str = "gemini-2.5-flash",
+    reocr: bool = False,
+    max_chars_per_page: int = 8000,
+    timeout_sec: int = 90,
+    progress_callback=None,   # (page_no, total_pages, stage, extra) -> None
+    keep_images: bool = True,
+    min_chars_retry: int = 120,
+    retry_model: str = "gemini-2.5-pro",
+) -> list[dict]:
+    """
+    강제 OCR 파이프라인:
+    PDF → 페이지 PNG → 각 페이지 OCR → [{"page":n,"text":...}] 반환
+    캐시: cache_dir/pages/p001.txt 존재하면 재호출 안 함 (reocr=True면 무시)
+
+    - 페이지별 예외가 나도 계속 진행 (pNNN.txt에 [OCR_ERROR] 기록 + ocr_errors.log 누적)
+    - timeout_sec으로 블로킹 방지
+    - 짧은 페이지(min_chars_retry 미만)는 retry_model로 1회 재시도(비용 고려)
+    - keep_images=False면 OCR 후 PNG 삭제(용량 절감)
+    """
+    pages_dir = os.path.join(cache_dir, "pages")
+    os.makedirs(pages_dir, exist_ok=True)
+
+    image_paths = pdf_to_page_pngs(pdf_path, pages_dir, dpi=dpi)
+    total_pages = len(image_paths)
+
+    err_log = os.path.join(cache_dir, "ocr_errors.log")
+
+    out_pages = []
+    for idx, img_path in enumerate(image_paths):
+        page_no = idx + 1
+        txt_path = os.path.join(pages_dir, f"p{page_no:03d}.txt")
+
+        if progress_callback:
+            progress_callback(page_no, total_pages, "start", {"path": img_path})
+
+        try:
+            if (not reocr) and os.path.exists(txt_path):
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    txt = f.read()
+            else:
+                txt = ocr_page_image_with_timeout(
+                    client=client,
+                    image_path=img_path,
+                    page_no=page_no,
+                    model_name=model_name,
+                    max_chars=max_chars_per_page,
+                    timeout_sec=timeout_sec,
+                )
+
+                # 짧은 페이지 재시도(Flash → Pro)
+                if min_chars_retry and retry_model and len((txt or "").strip()) < min_chars_retry:
+                    try:
+                        txt2 = ocr_page_image_with_timeout(
+                            client=client,
+                            image_path=img_path,
+                            page_no=page_no,
+                            model_name=retry_model,
+                            max_chars=max_chars_per_page,
+                            timeout_sec=min(timeout_sec * 2, 180),
+                        )
+                        if len((txt2 or "").strip()) > len((txt or "").strip()):
+                            txt = txt2
+                    except Exception:
+                        pass
+
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(txt)
+
+        except Exception as e:
+            msg = f"[OCR_ERROR] page={page_no} file={os.path.basename(img_path)} err={type(e).__name__}: {e}"
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(msg)
+            with open(err_log, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+            txt = msg
+
+        # 용량 절감 옵션
+        if not keep_images:
+            try:
+                if os.path.exists(img_path):
+                    os.remove(img_path)
+            except Exception:
+                pass
+
+        out_pages.append({"page": page_no, "text": txt})
+
+        if progress_callback:
+            stage = "error" if (txt or "").startswith("[OCR_ERROR]") else "done"
+            progress_callback(page_no, total_pages, stage, {"txt_len": len((txt or ""))})
+
+    return out_pages

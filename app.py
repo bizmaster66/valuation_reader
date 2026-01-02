@@ -1,4 +1,7 @@
 import os
+import glob
+import shutil
+import time
 import json
 import hashlib
 from datetime import datetime
@@ -239,10 +242,25 @@ st.title("AI 심사역 powered by MARK")
 
 st.sidebar.header("옵션")
 use_company_profile = st.sidebar.toggle("회사 설명문(홈페이지/뉴스) 생성", value=True)
-use_vision_fallback = st.sidebar.toggle("스캔 PDF OCR(vision) 자동 사용", value=True)
 use_visual_insights = st.sidebar.toggle("표/차트/그래프 인사이트 추출", value=True)
-force_ocr = st.sidebar.toggle("강제 OCR(테스트)", value=False)
-show_debug = st.sidebar.toggle("디버그 표시", value=False)
+
+# --- OCR/캐시 옵션 ---
+keep_images = st.sidebar.toggle("OCR 캐시 PNG 보관(용량↑)", value=True)
+min_chars_retry = st.sidebar.number_input("짧은 페이지 재시도 기준(글자수)", min_value=0, max_value=1000, value=120, step=10)
+ocr_timeout_sec = st.sidebar.number_input("페이지 OCR 타임아웃(초)", min_value=10, max_value=300, value=90, step=10)
+cache_keep_days = st.sidebar.number_input("OCR 캐시 보관일(일)", min_value=1, max_value=365, value=30, step=1)
+
+if st.sidebar.button("🧹 OCR 캐시 정리(보관일 초과 삭제)"):
+    cutoff = time.time() - int(cache_keep_days) * 86400
+    removed = 0
+    for d in glob.glob("data/ocr_cache/*"):
+        try:
+            if os.path.isdir(d) and os.path.getmtime(d) < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                removed += 1
+        except Exception:
+            pass
+    st.sidebar.success(f"삭제 완료: {removed}개 캐시 폴더")
 reocr = st.sidebar.toggle("OCR 캐시 무시(재추출)", value=False)
 dpi = st.sidebar.slider("OCR 렌더 DPI", min_value=180, max_value=300, value=220, step=20)
 
@@ -275,6 +293,7 @@ if run_btn:
 
     for up in uploaded_files[:10]:
         file_key = hashlib.md5(up.getvalue()).hexdigest()[:10]
+        st.sidebar.caption(f"처리중: {up.name} | cache_key={file_key} | dpi={dpi} | reocr={reocr}")
         if file_key in st.session_state.result_cache:
             st.session_state.rows.append(st.session_state.result_cache[file_key])
             continue
@@ -284,6 +303,14 @@ if run_btn:
         pdf_path = save_uploaded_pdf(up)
 
         ocr_cache_dir = f"data/ocr_cache/{file_key}"
+        # OCR 진행률 표시
+        ocr_prog = st.progress(0)
+        ocr_msg = st.empty()
+
+        def _ocr_progress_cb(page_no, total_pages, stage, extra):
+            pct = int(page_no * 100 / max(total_pages, 1))
+            ocr_prog.progress(pct)
+            ocr_msg.caption(f"OCR {page_no}/{total_pages} ({pct}%) - {stage}")
         pages = ocr_pdf_all_pages(
             client=client,
             pdf_path=pdf_path,
@@ -292,6 +319,10 @@ if run_btn:
             model_name="gemini-2.5-flash",
             reocr=reocr,
             max_chars_per_page=8000,
+            timeout_sec=ocr_timeout_sec,
+            keep_images=keep_images,
+            min_chars_retry=min_chars_retry,
+            progress_callback=_ocr_progress_cb,
         )
 
         packed_text = build_packed_text(pages, limit_chars=90000)
@@ -696,3 +727,4 @@ else:
                 st.session_state.selected_report_path = report_path
                 st.session_state.view_mode = "detail"
                 st.rerun()
+st.sidebar.caption("PDF는 전 페이지를 이미지로 변환한 뒤 OCR로 처리합니다(고정).")
