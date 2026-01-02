@@ -11,14 +11,14 @@ import pandas as pd
 import streamlit as st
 
 from src.gemini_client import get_client
-from src.pdf_reader import extract_pages
 from src.storage import append_history, load_history
 from src.startup_analyzer_adapter import generate_company_profile
 
 from src.evaluator_simple import run_overall_evaluation  # evaluator는 섹션 점수/분석/개선안/요약 생성
 from src.dataset_logger import upsert_ai_output, load_ai_outputs, AI_OUTPUT_PATH
-from src.pdf_vision import needs_vision, gemini_pdf_ocr_text, gemini_pdf_visual_insights
+from src.pdf_vision import gemini_pdf_visual_insights
 
+from src.pdf_ocr_pages import ocr_pdf_all_pages
 from src.weight_engine import WeightEngine
 
 
@@ -243,6 +243,8 @@ use_vision_fallback = st.sidebar.toggle("스캔 PDF OCR(vision) 자동 사용", 
 use_visual_insights = st.sidebar.toggle("표/차트/그래프 인사이트 추출", value=True)
 force_ocr = st.sidebar.toggle("강제 OCR(테스트)", value=False)
 show_debug = st.sidebar.toggle("디버그 표시", value=False)
+reocr = st.sidebar.toggle("OCR 캐시 무시(재추출)", value=False)
+dpi = st.sidebar.slider("OCR 렌더 DPI", min_value=180, max_value=300, value=220, step=20)
 
 uploaded_files = st.file_uploader("IR PDF 업로드(최대 10개)", type=["pdf"], accept_multiple_files=True)
 run_btn = st.button("분석 실행", type="primary", disabled=not uploaded_files)
@@ -277,58 +279,60 @@ if run_btn:
             st.session_state.rows.append(st.session_state.result_cache[file_key])
             continue
 
-        # PDF 읽기
+        # PDF 읽기 (강제 OCR: 전 페이지 이미지 기반)
         pdf_bytes = up.getvalue()
         pdf_path = save_uploaded_pdf(up)
-        pages = extract_pages(pdf_path)
 
-        packed_text_pypdf = build_packed_text(pages, limit_chars=60000)
+        ocr_cache_dir = f"data/ocr_cache/{file_key}"
+        pages = ocr_pdf_all_pages(
+            client=client,
+            pdf_path=pdf_path,
+            cache_dir=ocr_cache_dir,
+            dpi=dpi,
+            model_name="gemini-2.5-flash",
+            reocr=reocr,
+            max_chars_per_page=8000,
+        )
 
-        total_chars = sum(len((p.get("text") or "").strip()) for p in pages)
-        nonempty_pages = sum(1 for p in pages if (p.get("text") or "").strip())
-        need_v = needs_vision(pages)
+        packed_text = build_packed_text(pages, limit_chars=90000)
+        # fulltext 생성 (페이지별 OCR 텍스트를 순서대로 연결)
+        from src.fulltext_from_cache import build_fulltext_from_pages_dir
+        fulltext = build_fulltext_from_pages_dir(os.path.join(ocr_cache_dir, "pages"))
 
-        packed_text = packed_text_pypdf
-        ocr_text = ""
-        ocr_error = ""
-
-        if use_vision_fallback and (force_ocr or need_v):
-            try:
-                ocr_text = gemini_pdf_ocr_text(client, pdf_bytes, model_name="gemini-2.5-flash", max_chars=90000)
-            except Exception as e:
-                ocr_error = str(e)
-
-            if force_ocr:
-                packed_text = ocr_text if ocr_text else packed_text_pypdf
-            else:
-                if len(ocr_text.strip()) > max(500, len(packed_text_pypdf.strip())):
-                    packed_text = ocr_text
-
+        # (선택) 표/차트/그래프 보조 인사이트(추가 호출)
         if use_visual_insights:
             try:
-                vis = gemini_pdf_visual_insights(client, pdf_bytes, model_name="gemini-2.5-flash", max_chars=12000)
+                vis = gemini_pdf_visual_insights(
+                    client, pdf_bytes, model_name="gemini-2.5-flash", max_chars=12000
+                )
                 if vis and vis.strip():
                     packed_text = (packed_text + "\n\n" + vis)[:90000]
             except Exception:
                 pass
 
         if show_debug:
-            st.sidebar.markdown("### [PDF 추출 디버그]")
+            ocr_total_chars = sum(len((p.get("text") or "").strip()) for p in pages)
+            nonempty_pages = sum(1 for p in pages if (p.get("text") or "").strip())
+            st.sidebar.markdown("### [PDF OCR 디버그]")
             st.sidebar.caption(f"file: {up.name}")
-            st.sidebar.caption(f"pypdf total_chars={total_chars}, nonempty_pages={nonempty_pages}, needs_vision={need_v}")
-            st.sidebar.caption(f"pypdf packed len={len(packed_text_pypdf)}")
-            st.sidebar.caption(f"ocr len={len(ocr_text)}")
-            if ocr_error:
-                st.sidebar.error(f"OCR error: {ocr_error}")
-            st.sidebar.caption(f"final packed len={len(packed_text)}")
+            st.sidebar.caption(f"pages={len(pages)}, nonempty_pages={nonempty_pages}")
+            st.sidebar.caption(f"ocr_total_chars={ocr_total_chars}")
+            st.sidebar.caption(f"packed len={len(packed_text)}")
+            st.sidebar.caption(f"ocr cache dir: {ocr_cache_dir}")
 
         # 기업/대표 추출
         extracted = extract_company_and_ceo(client, packed_text)
         company = extracted.get("company_name") or "unknown_company"
         ceo = extracted.get("ceo_name") or "unknown_ceo"
 
+
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_dir = f"data/outputs/{company}/{ts}"
+
+        # fulltext 저장
+        os.makedirs(out_dir, exist_ok=True)
+        with open(f"{out_dir}/01_fulltext.txt", "w", encoding="utf-8") as f:
+            f.write(fulltext)
 
         write_md(
             f"{out_dir}/00_extract.md",
