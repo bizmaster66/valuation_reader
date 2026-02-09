@@ -11,8 +11,11 @@ with st.sidebar:
     st.header("Drive 설정")
     folder_id = st.text_input("Google Drive 폴더 ID", value="")
     rules = load_yaml("config/eval_rules.yaml")
-    default_ir_id = rules.get("knowledge_sources", {}).get("ir_strategy_file_id", "")
-    default_docx_id = rules.get("knowledge_sources", {}).get("investor_report_sample_file_id", "")
+    knowledge_cfg = rules.get("knowledge_sources", {})
+    default_ir_id = knowledge_cfg.get("ir_strategy_file_id", "")
+    default_docx_id = knowledge_cfg.get("investor_report_sample_file_id", "")
+    local_ir_path = knowledge_cfg.get("local_ir_strategy_path", "")
+    local_docx_path = knowledge_cfg.get("local_investor_report_sample_path", "")
     ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value=default_ir_id)
     report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value=default_docx_id)
     model_name = st.text_input("Gemini 모델", value="gemini-2.5-flash")
@@ -42,8 +45,8 @@ if run_btn:
             model_name=model_name,
             ir_strategy_file_id=ir_strategy_file_id,
             sample_docx_id=report_sample_file_id,
-            local_ir_strategy_path="",
-            local_sample_docx_path="",
+            local_ir_strategy_path=local_ir_path,
+            local_sample_docx_path=local_docx_path,
         )
     st.session_state.results = results
     st.session_state.selected_idx = None

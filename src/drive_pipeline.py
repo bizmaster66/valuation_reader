@@ -92,9 +92,12 @@ def run_drive_evaluation(
     result_folder_id = find_or_create_folder(service, folder_id, rules["output"]["result_folder_name"])
     processed = load_processed_index(service, result_folder_id)
 
-    ir_strategy_file_id = ir_strategy_file_id or rules.get("knowledge_sources", {}).get("ir_strategy_file_id", "")
-    sample_docx_id = sample_docx_id or rules.get("knowledge_sources", {}).get(
-        "investor_report_sample_file_id", ""
+    knowledge_cfg = rules.get("knowledge_sources", {})
+    ir_strategy_file_id = ir_strategy_file_id or knowledge_cfg.get("ir_strategy_file_id", "")
+    sample_docx_id = sample_docx_id or knowledge_cfg.get("investor_report_sample_file_id", "")
+    local_ir_strategy_path = local_ir_strategy_path or knowledge_cfg.get("local_ir_strategy_path", "")
+    local_sample_docx_path = local_sample_docx_path or knowledge_cfg.get(
+        "local_investor_report_sample_path", ""
     )
 
     knowledge_text = _load_knowledge_text(
