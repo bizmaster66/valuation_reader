@@ -35,7 +35,11 @@ def _extract_pdf_text(pdf_bytes: bytes, max_chars: int = 120000) -> str:
 
 def _load_knowledge_text(service, ir_strategy_file_id: str = "", local_path: str = "") -> str:
     if ir_strategy_file_id:
-        meta = service.files().get(fileId=ir_strategy_file_id, fields="id,mimeType").execute()
+        meta = (
+            service.files()
+            .get(fileId=ir_strategy_file_id, fields="id,mimeType", supportsAllDrives=True)
+            .execute()
+        )
         pdf_bytes = download_file(service, meta["id"], meta.get("mimeType"))
         return _extract_pdf_text(pdf_bytes)
     if local_path:
@@ -46,7 +50,11 @@ def _load_knowledge_text(service, ir_strategy_file_id: str = "", local_path: str
 
 def _load_sample_headings(service, sample_docx_id: str = "", local_path: str = "") -> List[str]:
     if sample_docx_id:
-        meta = service.files().get(fileId=sample_docx_id, fields="id,mimeType").execute()
+        meta = (
+            service.files()
+            .get(fileId=sample_docx_id, fields="id,mimeType", supportsAllDrives=True)
+            .execute()
+        )
         docx_bytes = download_file(
             service,
             meta["id"],

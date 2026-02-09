@@ -60,6 +60,9 @@ def list_files_in_folder(service, folder_id: str) -> List[Dict]:
                 q=f"'{folder_id}' in parents and trashed=false",
                 fields="nextPageToken, files(id,name,mimeType,modifiedTime)",
                 pageToken=page_token,
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+                corpora="allDrives",
             )
             .execute()
         )
@@ -76,7 +79,17 @@ def find_file_by_name(service, folder_id: str, name: str) -> Optional[Dict]:
         f"'{folder_id}' in parents and trashed=false "
         f"and name = '{safe_name}'"
     )
-    resp = service.files().list(q=q, fields="files(id,name,mimeType)").execute()
+    resp = (
+        service.files()
+        .list(
+            q=q,
+            fields="files(id,name,mimeType)",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+            corpora="allDrives",
+        )
+        .execute()
+    )
     files = resp.get("files", [])
     return files[0] if files else None
 
@@ -88,13 +101,23 @@ def find_or_create_folder(service, parent_id: str, folder_name: str) -> str:
         f"and mimeType = 'application/vnd.google-apps.folder' "
         f"and name = '{safe_name}'"
     )
-    resp = service.files().list(q=q, fields="files(id,name)").execute()
+    resp = (
+        service.files()
+        .list(
+            q=q,
+            fields="files(id,name)",
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+            corpora="allDrives",
+        )
+        .execute()
+    )
     files = resp.get("files", [])
     if files:
         return files[0]["id"]
 
     metadata = {"name": folder_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]}
-    folder = service.files().create(body=metadata, fields="id").execute()
+    folder = service.files().create(body=metadata, fields="id", supportsAllDrives=True).execute()
     return folder["id"]
 
 
@@ -104,13 +127,13 @@ def download_file(
     # Export Google Docs if needed
     if mime_type and mime_type.startswith("application/vnd.google-apps."):
         if export_mime:
-            request = service.files().export(fileId=file_id, mimeType=export_mime)
+            request = service.files().export(fileId=file_id, mimeType=export_mime, supportsAllDrives=True)
         elif mime_type == "application/vnd.google-apps.document":
-            request = service.files().export(fileId=file_id, mimeType="text/plain")
+            request = service.files().export(fileId=file_id, mimeType="text/plain", supportsAllDrives=True)
         else:
-            request = service.files().export(fileId=file_id, mimeType="application/pdf")
+            request = service.files().export(fileId=file_id, mimeType="application/pdf", supportsAllDrives=True)
     else:
-        request = service.files().get_media(fileId=file_id)
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
 
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -132,11 +155,11 @@ def upload_bytes(
     media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime_type, resumable=False)
 
     if existing:
-        updated = service.files().update(fileId=existing["id"], media_body=media).execute()
+        updated = service.files().update(fileId=existing["id"], media_body=media, supportsAllDrives=True).execute()
         return updated["id"]
 
     metadata = {"name": filename, "parents": [parent_id]}
-    created = service.files().create(body=metadata, media_body=media, fields="id").execute()
+    created = service.files().create(body=metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
     return created["id"]
 
 
