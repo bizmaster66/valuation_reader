@@ -1,4 +1,5 @@
 from typing import List
+import io
 
 from docx import Document
 
@@ -15,7 +16,8 @@ DEFAULT_HEADINGS = [
 def extract_headings_from_sample(docx_bytes: bytes) -> List[str]:
     if not docx_bytes:
         return DEFAULT_HEADINGS
-    doc = Document(docx_bytes)
+    # python-docx expects a file-like object or path, not raw bytes
+    doc = Document(io.BytesIO(docx_bytes))
     headings = []
     for p in doc.paragraphs:
         text = (p.text or "").strip()
