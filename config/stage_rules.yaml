@@ -1,0 +1,37 @@
+version: 1
+language: ko
+
+stage_labels:
+  - seed
+  - pre_a
+  - series_a
+  - series_b_plus
+
+rules:
+  # 단순 룰 기반 추정. 향후 수정 가능.
+  seed:
+    signals:
+      - "매출/고객/거래 지표가 거의 없거나 파일럿 단계"
+      - "MVP/PoC/베타/검증 단계 언급"
+      - "초기 팀 구성, 핵심 제품 개발 중심"
+  pre_a:
+    signals:
+      - "초기 매출/유료 고객 일부 존재"
+      - "유료 전환/지표가 있으나 규모는 작음"
+      - "제품-시장 적합성(PMF) 탐색 단계"
+  series_a:
+    signals:
+      - "재현 가능한 성장 지표(ARR, MAU, 계약 규모 등) 제시"
+      - "명확한 GTM 전략 및 채널 확장"
+      - "시장 확장/채널 스케일링 언급"
+  series_b_plus:
+    signals:
+      - "대형 고객/엔터프라이즈 계약, 글로벌 확장, M&A/IPO 계획"
+      - "성장 지표가 안정적이며 조직 확장/운영 고도화 단계"
+
+weights_by_stage:
+  # 내부용 가중치. 보고서에는 최종 점수만 표기.
+  seed: { completeness: 0.90, growth: 0.10 }
+  pre_a: { completeness: 0.80, growth: 0.20 }
+  series_a: { completeness: 0.70, growth: 0.30 }
+  series_b_plus: { completeness: 0.60, growth: 0.40 }

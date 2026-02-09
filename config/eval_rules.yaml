@@ -1,0 +1,89 @@
+version: 1
+language: ko
+
+input:
+  md_filename_suffix: "분석보고서.md"
+  recursive: false
+  company_name_rules:
+    - type: "line_prefix"
+      pattern: "**회사명:**"
+    - type: "title_prefix"
+      pattern: "#"
+  web_search: false
+
+scoring:
+  section_scale_min: 0
+  section_scale_max: 10
+  total_score_method: "sum"
+  total_score_max: 90
+  consistency: "temperature_0"
+
+sections:
+  - name: "문제 정의"
+  - name: "솔루션 & 제품"
+  - name: "시장 분석"
+  - name: "비즈니스 모델"
+  - name: "경쟁 우위"
+  - name: "성장 전략"
+  - name: "팀 역량"
+  - name: "재무 계획"
+  - name: "리스크 관리"
+
+evidence:
+  allow_paraphrase: true
+  require_direct_quote: false
+
+feedback:
+  per_section_sentences_min: 3
+  per_section_sentences_max: 5
+  overall_sentences_min: 15
+  overall_sentences_max: 20
+  include:
+    - "강점(✅)"
+    - "보완사항(❌)"
+    - "보완 제안(💡)"
+    - "투자자 관점 질문(❓)"
+    - "리스크 및 기대요소 요약"
+
+output:
+  result_folder_name: "result"
+  filename_template: "{date}_{company}_eval.xlsx"
+  date_format: "%Y%m%d"
+  reports:
+    investor_report:
+      format: "docx"
+      filename_template: "{date}_{company}_investor_report.docx"
+      target_length_chars_min: 3000
+      target_length_chars_max: 4000
+      template: "[결과물]투자자용 요약 및 추천_샘플.docx"
+    detailed_feedback:
+      format: "docx"
+      filename_template: "{date}_{company}_feedback.docx"
+      target_length_chars_min: 3000
+      target_length_chars_max: 4000
+
+rules:
+  role: "VC AI 심사역"
+  conservative_scoring: true
+  recommendation_threshold: 80
+  tone:
+    above_threshold: "긍정적/매력적, 강점 우선, 리스크 균형"
+    below_threshold: "중립적/비판적, 보완 필요 우선"
+  outputs:
+    generate_script: false
+    generate_investor_report: true
+    generate_feedback_report: true
+    generate_eval_sheet: true
+  question_list:
+    enabled: true
+    min_questions_per_section: 5
+  missing_info_policy:
+    no_guessing: true
+    allow_paraphrase: true
+
+dedup:
+  key: "filename"
+
+knowledge_sources:
+  ir_strategy_guide: "IR 자료 작성 및 투자유치 전략.pdf"
+  investor_report_sample: "[결과물]투자자용 요약 및 추천_샘플.docx"
