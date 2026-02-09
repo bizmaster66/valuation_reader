@@ -22,6 +22,11 @@ def _load_service_account_info() -> Dict:
                 return json.loads(sa)
             if isinstance(sa, dict):
                 return sa
+            # Streamlit AttrDict support
+            try:
+                return dict(sa)
+            except Exception:
+                pass
     except Exception:
         pass
 

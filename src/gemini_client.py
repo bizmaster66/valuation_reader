@@ -11,7 +11,7 @@ def get_client():
         try:
             import streamlit as st
 
-            api_key = st.secrets.get("gemini_api_key", "")
+            api_key = st.secrets.get("gemini_api_key", "") or st.secrets.get("GEMINI_API_KEY", "")
         except Exception:
             pass
     if not api_key:
