@@ -1,7 +1,7 @@
 import io
 from datetime import datetime
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional, Callable
 
 import pandas as pd
 from pypdf import PdfReader
@@ -80,7 +80,8 @@ def run_drive_evaluation(
     sample_docx_id: str = "",
     local_ir_strategy_path: str = "",
     local_sample_docx_path: str = "",
-) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]]]:
+    progress_cb: Optional[Callable[[Dict[str, int]], None]] = None,
+) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], Dict[str, int]]:
     rules = load_yaml("config/eval_rules.yaml")
     questions = load_yaml("config/questions.yaml").get("questions", {})
     stage_rules = load_yaml("config/stage_rules.yaml")
@@ -110,6 +111,18 @@ def run_drive_evaluation(
 
     results = []
     status_rows = []
+    total_files = len(target_files)
+    already_processed = len([f for f in target_files if f["name"] in processed])
+    pending_files = total_files - already_processed
+    counts = {
+        "total": total_files,
+        "already_processed": already_processed,
+        "pending": pending_files,
+        "completed": 0,
+        "failed": 0,
+    }
+    if progress_cb:
+        progress_cb(counts)
     for f in target_files:
         filename = f["name"]
         if filename in processed:
@@ -164,6 +177,10 @@ def run_drive_evaluation(
                     "error": error_msg or eval_json.get("error", "") if isinstance(eval_json, dict) else "",
                 }
             )
+            counts["failed"] += 1
+            counts["pending"] = max(0, counts["pending"] - 1)
+            if progress_cb:
+                progress_cb(counts)
             continue
 
         scores = eval_json.get("section_scores", {})
@@ -260,6 +277,10 @@ def run_drive_evaluation(
                 "error": "",
             }
         )
+        counts["completed"] += 1
+        counts["pending"] = max(0, counts["pending"] - 1)
+        if progress_cb:
+            progress_cb(counts)
 
     save_processed_index(service, result_folder_id, processed)
-    return results, result_folder_id, status_rows
+    return results, result_folder_id, status_rows, counts

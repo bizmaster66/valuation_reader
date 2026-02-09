@@ -39,28 +39,53 @@ if "selected_idx" not in st.session_state:
     st.session_state.selected_idx = None
 
 if run_btn:
+    progress_bar = st.progress(0.0)
+    summary_box = st.empty()
+
+    def on_progress(counts):
+        total = counts.get("total", 0)
+        completed = counts.get("completed", 0)
+        progress = completed / total if total else 0
+        progress_bar.progress(progress)
+        summary_box.write(
+            f"총 {counts.get('total',0)}개 / 미처리 {counts.get('pending',0)}개 / 이미 처리됨 {counts.get('already_processed',0)}개 / 완료 {completed}개 / 실패 {counts.get('failed',0)}개"
+        )
+
     with st.spinner("Drive에서 파일을 읽고 평가 중입니다..."):
-        results, result_folder_id, status_rows = run_drive_evaluation(
+        results, result_folder_id, status_rows, counts = run_drive_evaluation(
             folder_id=folder_id,
             model_name=model_name,
             ir_strategy_file_id=ir_strategy_file_id,
             sample_docx_id=report_sample_file_id,
             local_ir_strategy_path=local_ir_path,
             local_sample_docx_path=local_docx_path,
+            progress_cb=on_progress,
         )
     st.session_state.results = results
     st.session_state.selected_idx = None
     st.session_state.status_rows = status_rows
-    completed = sum(1 for r in status_rows if r["status"] == "completed")
-    total = len(status_rows)
+    st.session_state.counts = counts
+    completed = counts.get("completed", 0)
+    total = counts.get("total", 0)
     progress = completed / total if total else 0
-    st.progress(progress)
-    st.success(f"완료: {completed}/{total}개 처리. 결과 폴더 ID: {result_folder_id}")
+    progress_bar.progress(progress)
+    summary_box.write(
+        f"총 {counts.get('total',0)}개 / 미처리 {counts.get('pending',0)}개 / 이미 처리됨 {counts.get('already_processed',0)}개 / 완료 {completed}개 / 실패 {counts.get('failed',0)}개"
+    )
+    st.success("분석 완료")
 
 if "status_rows" not in st.session_state:
     st.session_state.status_rows = []
+if "counts" not in st.session_state:
+    st.session_state.counts = {}
 
 status_rows = st.session_state.status_rows
+counts = st.session_state.counts
+if counts:
+    st.subheader("처리 요약")
+    st.write(
+        f"총 {counts.get('total',0)}개 / 미처리 {counts.get('pending',0)}개 / 이미 처리됨 {counts.get('already_processed',0)}개 / 완료 {counts.get('completed',0)}개 / 실패 {counts.get('failed',0)}개"
+    )
 if status_rows:
     st.subheader("처리 상태")
     status_map = {
