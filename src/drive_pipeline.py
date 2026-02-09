@@ -184,7 +184,7 @@ def run_drive_evaluation(
             continue
 
         scores = eval_json.get("section_scores", {})
-        total_score = eval_json.get("total_score_90", 0)
+        total_score = eval_json.get("total_score_100", 0)
         stage_estimate = eval_json.get("stage_estimate", "")
 
         company_safe = normalize_company_for_filename(company)
@@ -201,7 +201,8 @@ def run_drive_evaluation(
                         "company_name": company,
                         "ceo_name": ceo,
                         "stage_estimate": stage_estimate,
-                        "total_score_90": total_score,
+                        "total_score_100": total_score,
+                        "logic_score_10": eval_json.get("logic_score_10", ""),
                         "source_filename": filename,
                     }
                 ]
@@ -262,7 +263,7 @@ def run_drive_evaluation(
         results.append(
             {
                 "company_name": company,
-                "total_score_90": total_score,
+                "total_score_100": total_score,
                 "stage_estimate": stage_estimate,
                 "source_filename": filename,
                 "excel_file": excel_name,

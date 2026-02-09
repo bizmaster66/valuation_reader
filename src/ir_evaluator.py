@@ -57,7 +57,7 @@ def build_eval_prompt(
     knowledge_text: str,
     md_text: str,
     headings: List[str],
-    total_score_max: int = 90,
+    total_score_max: int = 100,
 ) -> str:
     header = (
         "역할: 당신은 VC의 'AI 심사역'이다.\n"
@@ -66,7 +66,8 @@ def build_eval_prompt(
         "- 웹 검색 금지. IR 문서 텍스트와 제공된 지식만 사용.\n"
         "- 없는 내용은 '확인 불가'로 표기하고 추정 금지.\n"
         "- 9개 항목(문제 정의~리스크 관리)만 평가.\n"
-        "- 항목 점수는 0~10점, 총점은 합계(최대 90점).\n"
+        "- 항목 점수는 0~10점(9개), 논리 점수 0~10점 추가.\n"
+        "- 총점은 (9개 합계 + 논리 점수)로 100점 만점.\n"
         "- 80점 이상/미만에 따라 보고서 톤을 일관되게 달리한다.\n"
         "- 결과물 2/3은 한국어 기준 3,000~4,000자 분량.\n"
         "- 항목별 피드백은 3~5문장, 종합 피드백은 15~20문장.\n"
@@ -81,7 +82,8 @@ def build_eval_prompt(
         '  "company_name": "...",\n'
         '  "ceo_name": "...",\n'
         '  "stage_estimate": "...",\n'
-        '  "total_score_90": 0,\n'
+        '  "logic_score_10": 0,\n'
+        '  "total_score_100": 0,\n'
         '  "section_scores": {"문제 정의": 0, ...},\n'
         '  "labels": ["근거 부족형", "검증 미흡형", "논리 단절형"],\n'
         '  "investor_report": {\n'
@@ -100,7 +102,6 @@ def build_eval_prompt(
         '        "strengths": "...",\n'
         '        "weaknesses": "...",\n'
         '        "improvements": "...",\n'
-        '        "investor_questions": "...",\n'
         '        "risks_expectations": "..."\n'
         "      }, ...\n"
         "    },\n"
@@ -119,6 +120,15 @@ def build_eval_prompt(
     prompt += "\n[지식 문서 요약/근거]\n" + (knowledge_text or "")[:120000] + "\n"
     prompt += "\n[IR 문서]\n" + (md_text or "")[:150000]
     prompt += f"\n\n[메타]\ncompany={company}\nceo={ceo}\nsections={sections}\n"
+    prompt += (
+        "\n[논리 점수 기준]\n"
+        "- 주장과 근거의 연결이 일관되는지\n"
+        "- 가설/주장이 데이터/사례로 뒷받침되는지\n"
+        "- 섹션 간 흐름이 자연스러운지\n"
+        "- 모순/비약이 없는지\n"
+        "위 기준으로 0~10점 부여\n"
+    )
+    prompt += f"\n[총점]\n총점 = (9개 항목 합계) + 논리 점수 (0~10)\n"
     prompt += f"total_score_max={total_score_max}\n"
     return prompt
 

@@ -15,7 +15,8 @@ scoring:
   section_scale_min: 0
   section_scale_max: 10
   total_score_method: "sum"
-  total_score_max: 90
+  logic_score_max: 10
+  total_score_max: 100
   consistency: "temperature_0"
 
 sections:
@@ -42,7 +43,6 @@ feedback:
     - "강점(✅)"
     - "보완사항(❌)"
     - "보완 제안(💡)"
-    - "투자자 관점 질문(❓)"
     - "리스크 및 기대요소 요약"
 
 output:

@@ -54,9 +54,9 @@ def build_investor_report_docx(
     return buf.getvalue()
 
 
-def build_feedback_report_docx(company: str, feedback: Dict, total_score_90: float) -> bytes:
+def build_feedback_report_docx(company: str, feedback: Dict, total_score_100: float) -> bytes:
     doc = Document()
-    doc.add_heading(f"{company} IR 상세 피드백: 총점 {total_score_90}점", level=1)
+    doc.add_heading(f"{company} IR 상세 피드백: 총점 {total_score_100}점", level=1)
 
     overall = feedback.get("overall_summary", "")
     if overall:
@@ -69,7 +69,6 @@ def build_feedback_report_docx(company: str, feedback: Dict, total_score_90: flo
         _add_paragraph_with_bold(doc, f"✅ 강점: {info.get('strengths', '')}")
         _add_paragraph_with_bold(doc, f"❌ 보완사항: {info.get('weaknesses', '')}")
         _add_paragraph_with_bold(doc, f"💡 보완 제안: {info.get('improvements', '')}")
-        _add_paragraph_with_bold(doc, f"❓ 투자자 관점 질문: {info.get('investor_questions', '')}")
         _add_paragraph_with_bold(doc, f"리스크/기대요소: {info.get('risks_expectations', '')}")
 
     priorities = feedback.get("priorities", "")
