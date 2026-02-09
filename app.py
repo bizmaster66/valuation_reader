@@ -12,6 +12,17 @@ with st.sidebar:
     ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value="")
     report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value="")
     model_name = st.text_input("Gemini 모델", value="gemini-2.5-flash")
+    if st.checkbox("Secrets 상태 보기", value=False):
+        try:
+            keys = list(st.secrets.keys())
+        except Exception:
+            keys = []
+        st.write("Secrets keys:", keys)
+        st.write("has gcp_service_account:", "gcp_service_account" in keys)
+        st.write("has gemini_api_key:", "gemini_api_key" in keys)
+        if "gcp_service_account" in keys:
+            sa = st.secrets.get("gcp_service_account")
+            st.write("gcp_service_account type:", type(sa).__name__)
 
 run_btn = st.button("분석 실행", type="primary", disabled=not folder_id)
 
