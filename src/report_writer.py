@@ -29,6 +29,7 @@ def build_investor_report_docx(
     funding_plan: str,
     recommendation: str,
     headings: List[str],
+    include_recommendation: bool = True,
 ) -> bytes:
     doc = Document()
     doc.add_heading(f"{company} 투자자용 요약 및 추천", level=1)
@@ -44,17 +45,18 @@ def build_investor_report_docx(
         else:
             _add_paragraph_with_bold(doc, sections.get(heading, ""))
 
-    doc.add_heading("Recommendation", level=2)
-    _add_paragraph_with_bold(doc, recommendation)
+    if include_recommendation:
+        doc.add_heading("Recommendation", level=2)
+        _add_paragraph_with_bold(doc, recommendation)
 
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
 
 
-def build_feedback_report_docx(company: str, feedback: Dict) -> bytes:
+def build_feedback_report_docx(company: str, feedback: Dict, total_score_90: float) -> bytes:
     doc = Document()
-    doc.add_heading(f"{company} IR 상세 피드백", level=1)
+    doc.add_heading(f"{company} IR 상세 피드백: 총점 {total_score_90}점", level=1)
 
     overall = feedback.get("overall_summary", "")
     if overall:

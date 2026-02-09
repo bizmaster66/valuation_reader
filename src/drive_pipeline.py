@@ -221,6 +221,7 @@ def run_drive_evaluation(
         # Investor report docx
         investor_report = eval_json.get("investor_report", {})
         highlights = investor_report.get(headings[2], []) if len(headings) > 2 else []
+        include_recommendation = total_score >= 80
         investor_docx = build_investor_report_docx(
             company=company,
             sections=investor_report,
@@ -229,6 +230,7 @@ def run_drive_evaluation(
             funding_plan=investor_report.get(headings[4], "") if len(headings) > 4 else "",
             recommendation=investor_report.get("Recommendation", ""),
             headings=headings,
+            include_recommendation=include_recommendation,
         )
         investor_name = rules["output"]["reports"]["investor_report"]["filename_template"].format(
             date=date_str, company=company_safe
@@ -243,7 +245,7 @@ def run_drive_evaluation(
         )
 
         # Feedback docx
-        feedback_docx = build_feedback_report_docx(company, eval_json.get("feedback_report", {}))
+        feedback_docx = build_feedback_report_docx(company, eval_json.get("feedback_report", {}), total_score)
         feedback_name = rules["output"]["reports"]["detailed_feedback"]["filename_template"].format(
             date=date_str, company=company_safe
         )
