@@ -1,6 +1,7 @@
 import streamlit as st
 
 from src.drive_pipeline import run_drive_evaluation
+from src.config_loader import load_yaml
 
 
 st.set_page_config(page_title="AI 심사역", layout="wide")
@@ -9,8 +10,11 @@ st.title("AI 심사역")
 with st.sidebar:
     st.header("Drive 설정")
     folder_id = st.text_input("Google Drive 폴더 ID", value="")
-    ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value="")
-    report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value="")
+    rules = load_yaml("config/eval_rules.yaml")
+    default_ir_id = rules.get("knowledge_sources", {}).get("ir_strategy_file_id", "")
+    default_docx_id = rules.get("knowledge_sources", {}).get("investor_report_sample_file_id", "")
+    ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value=default_ir_id)
+    report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value=default_docx_id)
     model_name = st.text_input("Gemini 모델", value="gemini-2.5-flash")
     if st.checkbox("Secrets 상태 보기", value=False):
         try:
