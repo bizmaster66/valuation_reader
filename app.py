@@ -40,7 +40,7 @@ if "selected_idx" not in st.session_state:
 
 if run_btn:
     with st.spinner("Drive에서 파일을 읽고 평가 중입니다..."):
-        results, result_folder_id = run_drive_evaluation(
+        results, result_folder_id, status_rows = run_drive_evaluation(
             folder_id=folder_id,
             model_name=model_name,
             ir_strategy_file_id=ir_strategy_file_id,
@@ -50,7 +50,34 @@ if run_btn:
         )
     st.session_state.results = results
     st.session_state.selected_idx = None
-    st.success(f"완료: {len(results)}개 평가. 결과 폴더 ID: {result_folder_id}")
+    st.session_state.status_rows = status_rows
+    completed = sum(1 for r in status_rows if r["status"] == "completed")
+    total = len(status_rows)
+    progress = completed / total if total else 0
+    st.progress(progress)
+    st.success(f"완료: {completed}/{total}개 처리. 결과 폴더 ID: {result_folder_id}")
+
+if "status_rows" not in st.session_state:
+    st.session_state.status_rows = []
+
+status_rows = st.session_state.status_rows
+if status_rows:
+    st.subheader("처리 상태")
+    status_map = {
+        "completed": "완료",
+        "failed": "실패",
+        "already_processed": "이미 처리됨",
+    }
+    table = [
+        {
+            "파일명": r["filename"],
+            "회사명": r.get("company_name", ""),
+            "상태": status_map.get(r["status"], r["status"]),
+            "에러": r.get("error", ""),
+        }
+        for r in status_rows
+    ]
+    st.dataframe(table, use_container_width=True)
 
 results = st.session_state.results
 if results:

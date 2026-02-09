@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+import time
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
@@ -79,7 +80,7 @@ def run_drive_evaluation(
     sample_docx_id: str = "",
     local_ir_strategy_path: str = "",
     local_sample_docx_path: str = "",
-) -> Tuple[List[Dict[str, Any]], str]:
+) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]]]:
     rules = load_yaml("config/eval_rules.yaml")
     questions = load_yaml("config/questions.yaml").get("questions", {})
     stage_rules = load_yaml("config/stage_rules.yaml")
@@ -108,9 +109,18 @@ def run_drive_evaluation(
     )
 
     results = []
+    status_rows = []
     for f in target_files:
         filename = f["name"]
         if filename in processed:
+            status_rows.append(
+                {
+                    "filename": filename,
+                    "company_name": "",
+                    "status": "already_processed",
+                    "error": "",
+                }
+            )
             continue
 
         md_bytes = download_file(service, f["id"], f.get("mimeType"))
@@ -135,7 +145,26 @@ def run_drive_evaluation(
         from src.gemini_client import get_client
 
         client = get_client()
-        eval_json = run_evaluation(client, model_name=model_name, prompt=prompt)
+        eval_json = None
+        error_msg = ""
+        for attempt in range(3):  # 1 try + 2 retries
+            try:
+                eval_json = run_evaluation(client, model_name=model_name, prompt=prompt)
+                break
+            except Exception as e:
+                error_msg = str(e)
+                if attempt < 2:
+                    time.sleep(5)
+        if not eval_json or isinstance(eval_json, dict) and eval_json.get("error"):
+            status_rows.append(
+                {
+                    "filename": filename,
+                    "company_name": company,
+                    "status": "failed",
+                    "error": error_msg or eval_json.get("error", "") if isinstance(eval_json, dict) else "",
+                }
+            )
+            continue
 
         scores = eval_json.get("section_scores", {})
         total_score = eval_json.get("total_score_90", 0)
@@ -223,6 +252,14 @@ def run_drive_evaluation(
                 "eval": eval_json,
             }
         )
+        status_rows.append(
+            {
+                "filename": filename,
+                "company_name": company,
+                "status": "completed",
+                "error": "",
+            }
+        )
 
     save_processed_index(service, result_folder_id, processed)
-    return results, result_folder_id
+    return results, result_folder_id, status_rows
