@@ -4,37 +4,26 @@ from src.drive_pipeline import run_drive_evaluation
 from src.config_loader import load_yaml
 
 
-st.set_page_config(page_title="AI 심사역", layout="wide")
-st.title("AI 심사역")
+st.set_page_config(page_title="ID Deck Analyzer powered by MARK", layout="wide")
+st.title("ID Deck Analyzer powered by MARK")
 
-with st.sidebar:
-    st.header("Drive 설정")
+rules = load_yaml("config/eval_rules.yaml")
+knowledge_cfg = rules.get("knowledge_sources", {})
+local_ir_path = knowledge_cfg.get("local_ir_strategy_path", "")
+local_docx_path = knowledge_cfg.get("local_investor_report_sample_path", "")
+model_name = "gemini-2.5-flash"
+ir_strategy_file_id = ""
+report_sample_file_id = ""
+
+col1, col2 = st.columns([3, 1])
+with col1:
     folder_id = st.text_input("Google Drive 폴더 ID", value="")
-    rules = load_yaml("config/eval_rules.yaml")
-    knowledge_cfg = rules.get("knowledge_sources", {})
-    default_ir_id = knowledge_cfg.get("ir_strategy_file_id", "")
-    default_docx_id = knowledge_cfg.get("investor_report_sample_file_id", "")
-    local_ir_path = knowledge_cfg.get("local_ir_strategy_path", "")
-    local_docx_path = knowledge_cfg.get("local_investor_report_sample_path", "")
-    ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value=default_ir_id)
-    report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value=default_docx_id)
-    model_name = st.text_input("Gemini 모델", value="gemini-2.5-flash")
+with col2:
     difficulty_mode = st.selectbox(
         "평가 난이도",
         options=["critical", "neutral", "positive"],
         index=0,
     )
-    if st.checkbox("Secrets 상태 보기", value=False):
-        try:
-            keys = list(st.secrets.keys())
-        except Exception:
-            keys = []
-        st.write("Secrets keys:", keys)
-        st.write("has gcp_service_account:", "gcp_service_account" in keys)
-        st.write("has gemini_api_key:", "gemini_api_key" in keys)
-        if "gcp_service_account" in keys:
-            sa = st.secrets.get("gcp_service_account")
-            st.write("gcp_service_account type:", type(sa).__name__)
 
 run_btn = st.button("분석 실행", type="primary", disabled=not folder_id)
 

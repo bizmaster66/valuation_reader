@@ -245,10 +245,10 @@ def run_drive_evaluation(
         # Tiered exponent adjustment: strong > mid > weak
         def _tier_alpha(s: float) -> float:
             if s >= 7:
-                return 0.4
+                return 0.55
             if s >= 4:
-                return 0.6
-            return 0.9
+                return 0.7
+            return 0.95
 
         def _adjust_score(s: float) -> float:
             s = max(0.0, min(10.0, float(s)))
