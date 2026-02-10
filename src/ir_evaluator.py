@@ -73,7 +73,7 @@ def build_eval_prompt(
         "- difficulty_mode에 따라 평가 톤을 조정한다(critical/neutral/positive).\n"
         "- 결과물 2/3은 한국어 기준 3,000~4,000자 분량.\n"
         "- 항목별 피드백은 3~5문장, 종합 피드백은 15~20문장.\n"
-        "- 항목별 질문 리스트는 최소 5개씩.\n"
+        "- 항목별 투자자 질문은 3~5개. 근거 부족/논리 구성/핵심 주장 관련 질문만 포함.\n"
         "- 페이지 표시는 (p.xx) 형태로 포함.\n"
         "- 출력은 JSON ONLY.\n\n"
     )
@@ -104,6 +104,7 @@ def build_eval_prompt(
         '        "strengths": "...",\n'
         '        "weaknesses": "...",\n'
         '        "improvements": "...",\n'
+        '        "investor_questions": ["...", "..."],\n'
         '        "risks_expectations": "..."\n'
         "      }, ...\n"
         "    },\n"

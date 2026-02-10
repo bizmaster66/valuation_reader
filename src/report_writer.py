@@ -69,6 +69,10 @@ def build_feedback_report_docx(company: str, feedback: Dict, total_score_100: fl
         _add_paragraph_with_bold(doc, f"✅ 강점: {info.get('strengths', '')}")
         _add_paragraph_with_bold(doc, f"❌ 보완사항: {info.get('weaknesses', '')}")
         _add_paragraph_with_bold(doc, f"💡 보완 제안: {info.get('improvements', '')}")
+        questions = info.get("investor_questions", [])
+        if isinstance(questions, list) and questions:
+            doc.add_paragraph("❓ 투자자 질문")
+            _add_bullet_list(doc, [str(q) for q in questions][:5])
         _add_paragraph_with_bold(doc, f"리스크/기대요소: {info.get('risks_expectations', '')}")
 
     priorities = feedback.get("priorities", "")
