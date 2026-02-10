@@ -4,6 +4,7 @@ from datetime import datetime
 import time
 from typing import Any, Dict, List, Tuple, Optional, Callable
 import random
+import math
 
 import pandas as pd
 from pypdf import PdfReader
@@ -240,6 +241,43 @@ def run_drive_evaluation(
         scores = eval_json.get("section_scores", {})
         logic_score = float(eval_json.get("logic_score_10", 0) or 0)
         total_score = float(eval_json.get("total_score_100", 0) or 0)
+
+        # Tiered exponent adjustment: strong > mid > weak
+        def _tier_alpha(s: float) -> float:
+            if s >= 7:
+                return 0.4
+            if s >= 4:
+                return 0.6
+            return 0.9
+
+        def _adjust_score(s: float) -> float:
+            s = max(0.0, min(10.0, float(s)))
+            alpha = _tier_alpha(s)
+            return round(10.0 * math.pow(s / 10.0, alpha), 2)
+
+        # Apply tiered adjustment to section scores and logic
+        for k in list(scores.keys()):
+            try:
+                scores[k] = _adjust_score(scores[k])
+            except Exception:
+                pass
+        logic_score = _adjust_score(logic_score)
+
+        # Global exponent to map 60 -> 80 (on 100 scale), then scale components proportionally
+        total_raw = sum([float(v) for v in scores.values() if isinstance(v, (int, float, str)) and str(v).strip() != ""]) + float(logic_score)
+        if total_raw > 0:
+            alpha_global = math.log(0.8) / math.log(0.6)
+            total_after = 100.0 * math.pow(total_raw / 100.0, alpha_global)
+            factor = total_after / total_raw
+            for k in list(scores.keys()):
+                try:
+                    scores[k] = round(float(scores[k]) * factor, 2)
+                except Exception:
+                    pass
+            logic_score = round(float(logic_score) * factor, 2)
+            total_score = total_after
+        else:
+            total_score = 0.0
 
         # Difficulty adjustment (deterministic by filename)
         def _rand_range(seed_key: str, lo: int, hi: int) -> int:
