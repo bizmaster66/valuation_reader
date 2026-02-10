@@ -89,6 +89,7 @@ def run_drive_evaluation(
     local_sample_docx_path: str = "",
     progress_cb: Optional[Callable[[Dict[str, int]], None]] = None,
     difficulty_mode: str = "critical",
+    reeval_filenames: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], Dict[str, int]]:
     rules = load_yaml("config/eval_rules.yaml")
     questions = load_yaml("config/questions.yaml").get("questions", {})
@@ -119,6 +120,7 @@ def run_drive_evaluation(
 
     results = []
     status_rows = []
+    reeval_filenames = set(reeval_filenames or [])
     total_files = len(target_files)
     already_processed = len([f for f in target_files if f["name"] in processed])
     pending_files = total_files - already_processed
@@ -133,7 +135,7 @@ def run_drive_evaluation(
         progress_cb(counts)
     for f in target_files:
         filename = f["name"]
-        if filename in processed:
+        if filename in processed and filename not in reeval_filenames:
             status_rows.append(
                 {
                     "filename": filename,
@@ -282,6 +284,30 @@ def run_drive_evaluation(
             meta.to_excel(writer, index=False, sheet_name="summary")
 
         excel_name = rules["output"]["filename_template"].format(date=date_str, company=company_safe)
+        investor_name = rules["output"]["reports"]["investor_report"]["filename_template"].format(
+            date=date_str, company=company_safe
+        )
+        feedback_name = rules["output"]["reports"]["detailed_feedback"]["filename_template"].format(
+            date=date_str, company=company_safe
+        )
+
+        # If re-evaluation, append suffix n based on existing files in result folder
+        if filename in reeval_filenames:
+            existing_files = list_files_in_folder(service, result_folder_id)
+            base = excel_name.rsplit(".", 1)[0]
+            max_n = 0
+            for ef in existing_files:
+                name = ef.get("name", "")
+                if name.startswith(base + "_재평가"):
+                    try:
+                        n_part = name.split("_재평가", 1)[1].split(".", 1)[0]
+                        max_n = max(max_n, int(n_part))
+                    except Exception:
+                        pass
+            suffix = f"_재평가{max_n + 1}"
+            excel_name = base + suffix + ".xlsx"
+            investor_name = investor_name.rsplit(".", 1)[0] + suffix + ".docx"
+            feedback_name = feedback_name.rsplit(".", 1)[0] + suffix + ".docx"
         upload_bytes(
             service,
             result_folder_id,
@@ -305,9 +331,6 @@ def run_drive_evaluation(
             headings=headings,
             include_recommendation=include_recommendation,
         )
-        investor_name = rules["output"]["reports"]["investor_report"]["filename_template"].format(
-            date=date_str, company=company_safe
-        )
         upload_bytes(
             service,
             result_folder_id,
@@ -319,9 +342,6 @@ def run_drive_evaluation(
 
         # Feedback docx
         feedback_docx = build_feedback_report_docx(company, eval_json.get("feedback_report", {}), total_score)
-        feedback_name = rules["output"]["reports"]["detailed_feedback"]["filename_template"].format(
-            date=date_str, company=company_safe
-        )
         upload_bytes(
             service,
             result_folder_id,
@@ -331,7 +351,8 @@ def run_drive_evaluation(
             overwrite=True,
         )
 
-        processed.append(filename)
+        if filename not in processed:
+            processed.append(filename)
         results.append(
             {
                 "company_name": company,

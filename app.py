@@ -43,11 +43,8 @@ if "results" not in st.session_state:
 if "selected_idx" not in st.session_state:
     st.session_state.selected_idx = None
 
-if run_btn:
-    progress_bar = st.progress(0.0)
-    summary_box = st.empty()
-
-    def on_progress(counts):
+def _on_progress_factory(progress_bar, summary_box):
+    def _cb(counts):
         total = counts.get("total", 0)
         completed = counts.get("completed", 0)
         progress = completed / total if total else 0
@@ -55,6 +52,14 @@ if run_btn:
         summary_box.write(
             f"총 {counts.get('total',0)}개 / 미처리 {counts.get('pending',0)}개 / 이미 처리됨 {counts.get('already_processed',0)}개 / 완료 {completed}개 / 실패 {counts.get('failed',0)}개"
         )
+
+    return _cb
+
+
+if run_btn:
+    progress_bar = st.progress(0.0)
+    summary_box = st.empty()
+    on_progress = _on_progress_factory(progress_bar, summary_box)
 
     with st.spinner("Drive에서 파일을 읽고 평가 중입니다..."):
         results, result_folder_id, status_rows, counts = run_drive_evaluation(
@@ -123,6 +128,33 @@ if results:
         for r in results
     ]
     st.dataframe(table, use_container_width=True)
+
+    st.subheader("재평가")
+    reeval_targets = []
+    for i, r in enumerate(status_rows):
+        label = f"{r.get('filename')} ({r.get('status')})"
+        if st.checkbox(label, key=f"reeval_{i}"):
+            reeval_targets.append(r.get("filename"))
+
+    if st.button("선택 재평가") and reeval_targets:
+        progress_bar = st.progress(0.0)
+        summary_box = st.empty()
+        on_progress = _on_progress_factory(progress_bar, summary_box)
+        with st.spinner("선택된 파일 재평가 중..."):
+            results, result_folder_id, status_rows, counts = run_drive_evaluation(
+                folder_id=folder_id,
+                model_name=model_name,
+                ir_strategy_file_id=ir_strategy_file_id,
+                sample_docx_id=report_sample_file_id,
+                local_ir_strategy_path=local_ir_path,
+                local_sample_docx_path=local_docx_path,
+                progress_cb=on_progress,
+                difficulty_mode=difficulty_mode,
+                reeval_filenames=reeval_targets,
+            )
+        st.session_state.results = results
+        st.session_state.status_rows = status_rows
+        st.session_state.counts = counts
 
     for i, r in enumerate(results):
         if st.button(f"보기: {r.get('company_name')} ({r.get('total_score_100')})", key=f"view_{i}"):
