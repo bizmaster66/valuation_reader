@@ -4,8 +4,8 @@ from src.drive_pipeline import run_drive_evaluation
 from src.config_loader import load_yaml
 
 
-st.set_page_config(page_title="ID Deck Analyzer powered by MARK", layout="wide")
-st.title("ID Deck Analyzer powered by MARK")
+st.set_page_config(page_title="IR DECK Analyzer powered by MARK", layout="wide")
+st.title("IR DECK Analyzer powered by MARK")
 
 rules = load_yaml("config/eval_rules.yaml")
 knowledge_cfg = rules.get("knowledge_sources", {})
