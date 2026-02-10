@@ -91,3 +91,5 @@ knowledge_sources:
   investor_report_sample_file_id: ""
   local_ir_strategy_path: "assets/knowledge/IR 자료 작성 및 투자유치 전략.pdf"
   local_investor_report_sample_path: "assets/knowledge/[결과물]투자자용 요약 및 추천_샘플.docx"
+  additional_docs:
+    - "assets/knowledge/평가 지식.pdf"

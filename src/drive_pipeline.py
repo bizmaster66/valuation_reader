@@ -57,6 +57,17 @@ def _load_knowledge_text(service, ir_strategy_file_id: str = "", local_path: str
     return ""
 
 
+def _load_additional_docs_text(paths: List[str]) -> str:
+    chunks = []
+    for p in paths or []:
+        try:
+            with open(p, "rb") as f:
+                chunks.append(_extract_pdf_text(f.read()))
+        except Exception:
+            continue
+    return "\n\n".join([c for c in chunks if c])
+
+
 def _load_sample_headings(service, sample_docx_id: str = "", local_path: str = "") -> List[str]:
     if sample_docx_id:
         meta = (
@@ -115,6 +126,9 @@ def run_drive_evaluation(
     knowledge_text = _load_knowledge_text(
         service, ir_strategy_file_id=ir_strategy_file_id, local_path=local_ir_strategy_path
     )
+    additional_docs = knowledge_cfg.get("additional_docs", []) if isinstance(knowledge_cfg, dict) else []
+    if additional_docs:
+        knowledge_text = knowledge_text + "\n\n" + _load_additional_docs_text(additional_docs)
     headings = _load_sample_headings(
         service, sample_docx_id=sample_docx_id, local_path=local_sample_docx_path
     )
