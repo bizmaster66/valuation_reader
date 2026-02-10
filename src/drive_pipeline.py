@@ -14,6 +14,7 @@ from src.docx_template import extract_headings_from_sample
 from src.drive_client import (
     download_file,
     find_or_create_folder,
+    find_file_by_name,
     get_drive_service,
     list_files_in_folder,
     load_processed_index,
