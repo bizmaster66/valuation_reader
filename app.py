@@ -139,7 +139,7 @@ if results:
     table = [
         {
             "회사명": r.get("company_name"),
-            "총점(100)": r.get("total_score_100"),
+            "총점(100)": round(r.get("total_score_100", 0)),
             "단계 추정": r.get("stage_estimate"),
             "원본 파일": r.get("source_filename"),
         }
@@ -148,14 +148,14 @@ if results:
     st.dataframe(table, use_container_width=True)
 
     for i, r in enumerate(results):
-        if st.button(f"보기: {r.get('company_name')} ({r.get('total_score_100')})", key=f"view_{i}"):
+        if st.button(f"보기: {r.get('company_name')} ({round(r.get('total_score_100', 0))})", key=f"view_{i}"):
             st.session_state.selected_idx = i
 
     if st.session_state.selected_idx is not None:
         r = results[st.session_state.selected_idx]
         eval_json = r.get("eval", {})
         st.subheader(f"{r.get('company_name')} 상세")
-        st.write(f"총점(100): {r.get('total_score_100')}")
+        st.write(f"총점(100): {round(r.get('total_score_100', 0))}")
         st.write(f"단계 추정: {r.get('stage_estimate')}")
 
         st.markdown("### 항목별 점수")

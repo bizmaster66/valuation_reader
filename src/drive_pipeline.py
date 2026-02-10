@@ -310,33 +310,14 @@ def run_drive_evaluation(
         # persist adjusted scores back
         eval_json["section_scores"] = scores
         eval_json["logic_score_10"] = logic_score
-        eval_json["total_score_100"] = total_score
+        eval_json["total_score_100"] = round(float(total_score))
         eval_json["difficulty_mode"] = difficulty_mode
         stage_estimate = eval_json.get("stage_estimate", "")
 
         company_safe = normalize_company_for_filename(company)
         date_str = datetime.now().strftime(rules["output"]["date_format"])
 
-        # Excel
-        df = pd.DataFrame([{k: scores.get(k, "") for k in sections}])
-        excel_buf = io.BytesIO()
-        with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="scores")
-            meta = pd.DataFrame(
-                [
-                    {
-                        "company_name": company,
-                        "ceo_name": ceo,
-                        "stage_estimate": stage_estimate,
-                        "total_score_100": total_score,
-                        "logic_score_10": eval_json.get("logic_score_10", ""),
-                        "source_filename": filename,
-                    }
-                ]
-            )
-            meta.to_excel(writer, index=False, sheet_name="summary")
-
-        excel_name = rules["output"]["filename_template"].format(date=date_str, company=company_safe)
+        history_filename = "evaluation_history.xlsx"
         investor_name = rules["output"]["reports"]["investor_report"]["filename_template"].format(
             date=date_str, company=company_safe
         )
@@ -347,7 +328,7 @@ def run_drive_evaluation(
         # If re-evaluation, append suffix n based on existing files in result folder
         if filename in reeval_filenames:
             existing_files = list_files_in_folder(service, result_folder_id)
-            base = excel_name.rsplit(".", 1)[0]
+            base = history_filename.rsplit(".", 1)[0]
             max_n = 0
             for ef in existing_files:
                 name = ef.get("name", "")
@@ -358,14 +339,42 @@ def run_drive_evaluation(
                     except Exception:
                         pass
             suffix = f"_재평가{max_n + 1}"
-            excel_name = base + suffix + ".xlsx"
+            history_filename = base + suffix + ".xlsx"
             investor_name = investor_name.rsplit(".", 1)[0] + suffix + ".docx"
             feedback_name = feedback_name.rsplit(".", 1)[0] + suffix + ".docx"
+        # Update history excel (single file), by filename (overwrite if exists)
+        existing_history = find_file_by_name(service, result_folder_id, history_filename)
+        history_rows = []
+        if existing_history:
+            try:
+                raw = download_file(service, existing_history["id"], existing_history.get("mimeType"))
+                history_df = pd.read_excel(io.BytesIO(raw))
+                history_rows = history_df.to_dict("records")
+            except Exception:
+                history_rows = []
+
+        # remove existing same filename
+        history_rows = [r for r in history_rows if r.get("source_filename") != filename]
+        history_rows.append(
+            {
+                "source_filename": filename,
+                "company_name": company,
+                "total_score_100": round(float(total_score)),
+                "logic_score_10": round(float(logic_score)),
+                "stage_estimate": stage_estimate,
+                "difficulty_mode": difficulty_mode,
+                "evaluated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+        history_df = pd.DataFrame(history_rows)
+        history_buf = io.BytesIO()
+        with pd.ExcelWriter(history_buf, engine="openpyxl") as writer:
+            history_df.to_excel(writer, index=False, sheet_name="history")
         upload_bytes(
             service,
             result_folder_id,
-            excel_name,
-            excel_buf.getvalue(),
+            history_filename,
+            history_buf.getvalue(),
             mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             overwrite=True,
         )
@@ -373,7 +382,7 @@ def run_drive_evaluation(
         # Investor report docx
         investor_report = eval_json.get("investor_report", {})
         highlights = investor_report.get(headings[2], []) if len(headings) > 2 else []
-        include_recommendation = total_score >= 80
+        include_recommendation = round(float(total_score)) >= 80
         investor_docx = build_investor_report_docx(
             company=company,
             sections=investor_report,
@@ -394,7 +403,7 @@ def run_drive_evaluation(
         )
 
         # Feedback docx
-        feedback_docx = build_feedback_report_docx(company, eval_json.get("feedback_report", {}), total_score)
+        feedback_docx = build_feedback_report_docx(company, eval_json.get("feedback_report", {}), round(float(total_score)))
         upload_bytes(
             service,
             result_folder_id,
@@ -409,10 +418,10 @@ def run_drive_evaluation(
         results.append(
             {
                 "company_name": company,
-                "total_score_100": total_score,
+                "total_score_100": round(float(total_score)),
                 "stage_estimate": stage_estimate,
                 "source_filename": filename,
-                "excel_file": excel_name,
+                "excel_file": history_filename,
                 "investor_report_file": investor_name,
                 "feedback_file": feedback_name,
                 "eval": eval_json,

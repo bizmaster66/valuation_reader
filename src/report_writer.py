@@ -56,7 +56,7 @@ def build_investor_report_docx(
 
 def build_feedback_report_docx(company: str, feedback: Dict, total_score_100: float) -> bytes:
     doc = Document()
-    doc.add_heading(f"{company} IR 상세 피드백: 총점 {total_score_100}점", level=1)
+    doc.add_heading(f"{company} IR 상세 피드백: 총점 {round(total_score_100)}점", level=1)
 
     overall = feedback.get("overall_summary", "")
     if overall:
