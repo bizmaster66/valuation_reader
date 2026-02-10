@@ -58,6 +58,7 @@ def build_eval_prompt(
     md_text: str,
     headings: List[str],
     total_score_max: int = 100,
+    difficulty_mode: str = "critical",
 ) -> str:
     header = (
         "역할: 당신은 VC의 'AI 심사역'이다.\n"
@@ -69,6 +70,7 @@ def build_eval_prompt(
         "- 항목 점수는 0~10점(9개), 논리 점수 0~10점 추가.\n"
         "- 총점은 (9개 합계 + 논리 점수)로 100점 만점.\n"
         "- 80점 이상/미만에 따라 보고서 톤을 일관되게 달리한다.\n"
+        "- difficulty_mode에 따라 평가 톤을 조정한다(critical/neutral/positive).\n"
         "- 결과물 2/3은 한국어 기준 3,000~4,000자 분량.\n"
         "- 항목별 피드백은 3~5문장, 종합 피드백은 15~20문장.\n"
         "- 항목별 질문 리스트는 최소 5개씩.\n"
@@ -120,6 +122,7 @@ def build_eval_prompt(
     prompt += "\n[지식 문서 요약/근거]\n" + (knowledge_text or "")[:120000] + "\n"
     prompt += "\n[IR 문서]\n" + (md_text or "")[:150000]
     prompt += f"\n\n[메타]\ncompany={company}\nceo={ceo}\nsections={sections}\n"
+    prompt += f"difficulty_mode={difficulty_mode}\n"
     prompt += (
         "\n[논리 점수 기준]\n"
         "- 주장과 근거의 연결이 일관되는지\n"

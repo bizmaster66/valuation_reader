@@ -2,6 +2,7 @@ import io
 from datetime import datetime
 import time
 from typing import Any, Dict, List, Tuple, Optional, Callable
+import random
 
 import pandas as pd
 from pypdf import PdfReader
@@ -18,7 +19,13 @@ from src.drive_client import (
     upload_bytes,
 )
 from src.ir_evaluator import build_eval_prompt, run_evaluation
-from src.md_parser import build_ir_text, extract_ceo_name, extract_company_name, normalize_company_for_filename
+from src.md_parser import (
+    build_ir_text,
+    extract_ceo_name,
+    extract_company_name,
+    extract_company_candidates,
+    normalize_company_for_filename,
+)
 from src.report_writer import build_feedback_report_docx, build_investor_report_docx
 
 
@@ -81,6 +88,7 @@ def run_drive_evaluation(
     local_ir_strategy_path: str = "",
     local_sample_docx_path: str = "",
     progress_cb: Optional[Callable[[Dict[str, int]], None]] = None,
+    difficulty_mode: str = "critical",
 ) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], Dict[str, int]]:
     rules = load_yaml("config/eval_rules.yaml")
     questions = load_yaml("config/questions.yaml").get("questions", {})
@@ -139,7 +147,7 @@ def run_drive_evaluation(
         md_bytes = download_file(service, f["id"], f.get("mimeType"))
         md_text = md_bytes.decode("utf-8", errors="ignore")
 
-        company = extract_company_name(md_text)
+        company = extract_company_name(md_text, filename)
         ceo = extract_ceo_name(md_text)
         ir_text = build_ir_text(md_text)
 
@@ -153,6 +161,7 @@ def run_drive_evaluation(
             md_text=ir_text,
             headings=headings,
             total_score_max=rules["scoring"]["total_score_max"],
+            difficulty_mode=difficulty_mode,
         )
 
         from src.gemini_client import get_client
@@ -183,8 +192,71 @@ def run_drive_evaluation(
                 progress_cb(counts)
             continue
 
+        # If company name seems off, try one re-run with better candidate
+        candidates = extract_company_candidates(md_text, filename)
+        combined_text = json.dumps(
+            {
+                "investor_report": eval_json.get("investor_report", {}),
+                "feedback_report": eval_json.get("feedback_report", {}),
+            },
+            ensure_ascii=False,
+        )
+        if company and company not in combined_text:
+            for c in candidates:
+                if c and c in combined_text:
+                    company = c
+                    prompt = build_eval_prompt(
+                        company=company,
+                        ceo=ceo,
+                        sections=sections,
+                        questions_by_section=questions,
+                        stage_rules=stage_rules,
+                        knowledge_text=knowledge_text,
+                        md_text=ir_text,
+                        headings=headings,
+                        total_score_max=rules["scoring"]["total_score_max"],
+                        difficulty_mode=difficulty_mode,
+                    )
+                    eval_json = run_evaluation(client, model_name=model_name, prompt=prompt)
+                    break
+
         scores = eval_json.get("section_scores", {})
-        total_score = eval_json.get("total_score_100", 0)
+        logic_score = float(eval_json.get("logic_score_10", 0) or 0)
+        total_score = float(eval_json.get("total_score_100", 0) or 0)
+
+        # Difficulty adjustment (deterministic by filename)
+        def _rand_range(seed_key: str, lo: int, hi: int) -> int:
+            rng = random.Random(seed_key)
+            return rng.randint(lo, hi)
+
+        bonus = 0
+        if difficulty_mode == "neutral":
+            bonus = _rand_range(filename + ":neutral", 3, 5)
+        elif difficulty_mode == "positive":
+            bonus = _rand_range(filename + ":neutral", 3, 5) + _rand_range(filename + ":positive", 3, 5)
+
+        if bonus:
+            total_score += bonus
+
+        # Cap total score by mode and proportionally scale section+logic if needed
+        cap_map = {"critical": 88, "neutral": 90, "positive": 93}
+        cap = cap_map.get(difficulty_mode, 88)
+        if total_score > cap:
+            factor = cap / total_score if total_score > 0 else 1.0
+            # scale section scores
+            for k in list(scores.keys()):
+                try:
+                    scores[k] = round(float(scores[k]) * factor, 2)
+                except Exception:
+                    pass
+            logic_score = round(logic_score * factor, 2)
+            total_score = cap
+
+        # persist adjusted scores back
+        eval_json["section_scores"] = scores
+        eval_json["logic_score_10"] = logic_score
+        eval_json["total_score_100"] = total_score
+        eval_json["difficulty_mode"] = difficulty_mode
         stage_estimate = eval_json.get("stage_estimate", "")
 
         company_safe = normalize_company_for_filename(company)

@@ -19,6 +19,11 @@ with st.sidebar:
     ir_strategy_file_id = st.text_input("IR 전략 PDF 파일 ID (옵션)", value=default_ir_id)
     report_sample_file_id = st.text_input("투자자용 요약 샘플 DOCX 파일 ID (옵션)", value=default_docx_id)
     model_name = st.text_input("Gemini 모델", value="gemini-2.5-flash")
+    difficulty_mode = st.selectbox(
+        "평가 난이도",
+        options=["critical", "neutral", "positive"],
+        index=0,
+    )
     if st.checkbox("Secrets 상태 보기", value=False):
         try:
             keys = list(st.secrets.keys())
@@ -60,6 +65,7 @@ if run_btn:
             local_ir_strategy_path=local_ir_path,
             local_sample_docx_path=local_docx_path,
             progress_cb=on_progress,
+            difficulty_mode=difficulty_mode,
         )
     st.session_state.results = results
     st.session_state.selected_idx = None
