@@ -116,19 +116,8 @@ if status_rows:
     st.dataframe(table, use_container_width=True)
 
 results = st.session_state.results
-if results:
-    st.subheader("평가 결과 목록")
-    table = [
-        {
-            "회사명": r.get("company_name"),
-            "총점(100)": r.get("total_score_100"),
-            "단계 추정": r.get("stage_estimate"),
-            "원본 파일": r.get("source_filename"),
-        }
-        for r in results
-    ]
-    st.dataframe(table, use_container_width=True)
 
+if status_rows:
     st.subheader("재평가")
     reeval_targets = []
     for i, r in enumerate(status_rows):
@@ -155,6 +144,19 @@ if results:
         st.session_state.results = results
         st.session_state.status_rows = status_rows
         st.session_state.counts = counts
+
+if results:
+    st.subheader("평가 결과 목록")
+    table = [
+        {
+            "회사명": r.get("company_name"),
+            "총점(100)": r.get("total_score_100"),
+            "단계 추정": r.get("stage_estimate"),
+            "원본 파일": r.get("source_filename"),
+        }
+        for r in results
+    ]
+    st.dataframe(table, use_container_width=True)
 
     for i, r in enumerate(results):
         if st.button(f"보기: {r.get('company_name')} ({r.get('total_score_100')})", key=f"view_{i}"):
