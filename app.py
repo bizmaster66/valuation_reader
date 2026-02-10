@@ -106,6 +106,7 @@ if status_rows:
     }
     table = [
         {
+            "선택": False,
             "파일명": r["filename"],
             "회사명": r.get("company_name", ""),
             "상태": status_map.get(r["status"], r["status"]),
@@ -113,18 +114,15 @@ if status_rows:
         }
         for r in status_rows
     ]
-    st.dataframe(table, use_container_width=True)
+    edited = st.data_editor(
+        table,
+        use_container_width=True,
+        hide_index=True,
+        column_config={"선택": st.column_config.CheckboxColumn(required=False)},
+        disabled=["파일명", "회사명", "상태", "에러"],
+    )
 
-results = st.session_state.results
-
-if status_rows:
-    st.subheader("재평가")
-    reeval_targets = []
-    for i, r in enumerate(status_rows):
-        label = f"{r.get('filename')} ({r.get('status')})"
-        if st.checkbox(label, key=f"reeval_{i}"):
-            reeval_targets.append(r.get("filename"))
-
+    reeval_targets = [row["파일명"] for row in edited if row.get("선택")]
     if st.button("선택 재평가") and reeval_targets:
         progress_bar = st.progress(0.0)
         summary_box = st.empty()
@@ -144,6 +142,8 @@ if status_rows:
         st.session_state.results = results
         st.session_state.status_rows = status_rows
         st.session_state.counts = counts
+
+results = st.session_state.results
 
 if results:
     st.subheader("평가 결과 목록")
