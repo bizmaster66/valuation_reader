@@ -10,6 +10,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+COMBINED_SCOPES = DRIVE_SCOPES + SHEETS_SCOPES
 
 
 def _load_service_account_info() -> Dict:
@@ -56,7 +57,8 @@ def get_drive_service():
 
 
 def get_sheets_service():
-    creds = _build_credentials(SHEETS_SCOPES)
+    # Sheets API calls (create/update) can require Drive permissions when moving files.
+    creds = _build_credentials(COMBINED_SCOPES)
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
