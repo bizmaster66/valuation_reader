@@ -506,7 +506,11 @@ def run_drive_register(
             company_breaks.append(row_cursor + len(rows) - 1)
         row_cursor += len(rows)
 
-    folder_meta = drive_service.files().get(fileId=folder_id, fields="name").execute()
+    folder_meta = (
+        drive_service.files()
+        .get(fileId=folder_id, fields="name", supportsAllDrives=True)
+        .execute()
+    )
     folder_name = folder_meta.get("name", folder_id)
     date_str = datetime.now().strftime("%Y%m%d")
     sheet_title = f"{folder_name}_result_{date_str}"
