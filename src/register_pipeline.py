@@ -67,10 +67,8 @@ def _extract_share_count(line: str) -> Optional[int]:
     return _to_int(m.group(1))
 
 
-def _format_num(value: Optional[int]) -> str:
-    if value is None:
-        return ""
-    return f"{value:,}"
+def _num_or_blank(value: Optional[int]):
+    return value if value is not None else ""
 
 
 def _clean_company_ko(name: str) -> str:
@@ -269,14 +267,14 @@ def _build_rows(
                 "등록번호": reg_no,
                 "변경연월일": b.get("change_date") or "",
                 "등기연월일": b.get("reg_date") or "",
-                "발행주식의 총수": _format_num(total),
-                "보통주식": _format_num(common),
-                "우선주식": _format_num(preferred),
-                "자본금의 액": _format_num(capital),
+                "발행주식의 총수": _num_or_blank(total),
+                "보통주식": _num_or_blank(common),
+                "우선주식": _num_or_blank(preferred),
+                "자본금의 액": _num_or_blank(capital),
                 "비고": note,
-                "총 주식수 증감": _format_num(delta_total),
-                "보통주 증감": _format_num(delta_common),
-                "우선주 증감": _format_num(delta_pref),
+                "총 주식수 증감": _num_or_blank(delta_total),
+                "보통주 증감": _num_or_blank(delta_common),
+                "우선주 증감": _num_or_blank(delta_pref),
                 "투자유치금액": "",
                 "주당 단가": "",
                 "기업가치": "",
@@ -298,10 +296,33 @@ def _filter_pdf_files(files: List[Dict]) -> List[Dict]:
     return out
 
 
+def _col_letter(idx: int) -> str:
+    # 0-based to A1 column letters
+    n = idx + 1
+    letters = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
+
+
 def _sheet_values_from_rows(rows: List[Dict[str, Any]], columns: List[str]) -> List[List[Any]]:
     values = [columns]
-    for r in rows:
-        values.append([r.get(c, "") for c in columns])
+    col_idx = {c: i for i, c in enumerate(columns)}
+    company_col = _col_letter(col_idx["기업명"])
+    total_col = _col_letter(col_idx["발행주식의 총수"])
+    common_col = _col_letter(col_idx["보통주식"])
+    pref_col = _col_letter(col_idx["우선주식"])
+    delta_total_col = col_idx["총 주식수 증감"]
+    delta_common_col = col_idx["보통주 증감"]
+    delta_pref_col = col_idx["우선주 증감"]
+
+    for i, r in enumerate(rows, start=2):  # sheet row number
+        row_vals = [r.get(c, "") for c in columns]
+        row_vals[delta_total_col] = f'=IF(${company_col}{i}=${company_col}{i-1},{total_col}{i}-{total_col}{i-1},"")'
+        row_vals[delta_common_col] = f'=IF(${company_col}{i}=${company_col}{i-1},{common_col}{i}-{common_col}{i-1},"")'
+        row_vals[delta_pref_col] = f'=IF(${company_col}{i}=${company_col}{i-1},{pref_col}{i}-{pref_col}{i-1},"")'
+        values.append(row_vals)
     return values
 
 
@@ -341,6 +362,27 @@ def _apply_sheet_formats(
                         "endColumnIndex": col + 1,
                     },
                     "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                    "fields": "userEnteredFormat.numberFormat",
+                }
+            }
+        )
+    # Number formats with commas
+    number_cols = [6, 7, 8, 9, 11, 12, 13]  # G,H,I,J,L,M,N
+    for col in number_cols:
+        requests.append(
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 1,
+                        "startColumnIndex": col,
+                        "endColumnIndex": col + 1,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                        }
+                    },
                     "fields": "userEnteredFormat.numberFormat",
                 }
             }
@@ -538,7 +580,7 @@ def run_drive_register(
     sheet_service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range="주식변동이력!A1",
-        valueInputOption="RAW",
+        valueInputOption="USER_ENTERED",
         body={"values": values},
     ).execute()
 
