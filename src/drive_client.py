@@ -9,6 +9,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 def _load_service_account_info() -> Dict:
@@ -44,10 +45,19 @@ def _load_service_account_info() -> Dict:
     raise RuntimeError("Service account info not found. Set Streamlit secrets or env vars.")
 
 
-def get_drive_service():
+def _build_credentials(scopes: List[str]):
     info = _load_service_account_info()
-    creds = service_account.Credentials.from_service_account_info(info, scopes=DRIVE_SCOPES)
+    return service_account.Credentials.from_service_account_info(info, scopes=scopes)
+
+
+def get_drive_service():
+    creds = _build_credentials(DRIVE_SCOPES)
     return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def get_sheets_service():
+    creds = _build_credentials(SHEETS_SCOPES)
+    return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
 def list_files_in_folder(service, folder_id: str) -> List[Dict]:
@@ -184,6 +194,29 @@ def save_processed_index(service, result_folder_id: str, processed: List[str]) -
         result_folder_id,
         index_name,
         payload,
+        mime_type="application/json",
+        overwrite=True,
+    )
+
+
+def load_json_file(service, folder_id: str, filename: str) -> Dict:
+    meta = find_file_by_name(service, folder_id, filename)
+    if not meta:
+        return {}
+    content = download_file(service, meta["id"], meta.get("mimeType"))
+    try:
+        return json.loads(content.decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def save_json_file(service, folder_id: str, filename: str, payload: Dict) -> None:
+    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    upload_bytes(
+        service,
+        folder_id,
+        filename,
+        content,
         mime_type="application/json",
         overwrite=True,
     )

@@ -13,3 +13,7 @@ uploads/
 
 # local backups
 *.bak
+
+# archives / backups
+*.zip
+기존 백업/
