@@ -305,22 +305,18 @@ def _sheet_values_from_rows(rows: List[Dict[str, Any]], columns: List[str]) -> L
     return values
 
 
-def _create_spreadsheet(sheet_service, title: str) -> str:
-    body = {"properties": {"title": title}, "sheets": [{"properties": {"title": "주식변동이력"}}]}
-    resp = sheet_service.spreadsheets().create(body=body, fields="spreadsheetId").execute()
-    return resp["spreadsheetId"]
-
-
-def _move_file_to_folder(drive_service, file_id: str, folder_id: str) -> None:
-    file = drive_service.files().get(fileId=file_id, fields="parents").execute()
-    prev_parents = ",".join(file.get("parents", []))
-    drive_service.files().update(
-        fileId=file_id,
-        addParents=folder_id,
-        removeParents=prev_parents,
-        fields="id, parents",
-        supportsAllDrives=True,
-    ).execute()
+def _create_spreadsheet(drive_service, title: str, parent_id: str) -> str:
+    body = {
+        "name": title,
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "parents": [parent_id],
+    }
+    resp = (
+        drive_service.files()
+        .create(body=body, fields="id", supportsAllDrives=True)
+        .execute()
+    )
+    return resp["id"]
 
 
 def _apply_sheet_formats(
@@ -506,17 +502,37 @@ def run_drive_register(
             company_breaks.append(row_cursor + len(rows) - 1)
         row_cursor += len(rows)
 
-    folder_meta = (
-        drive_service.files()
-        .get(fileId=folder_id, fields="name", supportsAllDrives=True)
-        .execute()
-    )
-    folder_name = folder_meta.get("name", folder_id)
+    try:
+        folder_meta = (
+            drive_service.files()
+            .get(fileId=folder_id, fields="name", supportsAllDrives=True)
+            .execute()
+        )
+        folder_name = folder_meta.get("name", folder_id)
+    except Exception:
+        folder_name = folder_id
     date_str = datetime.now().strftime("%Y%m%d")
     sheet_title = f"{folder_name}_result_{date_str}"
 
-    spreadsheet_id = _create_spreadsheet(sheet_service, sheet_title)
-    _move_file_to_folder(drive_service, spreadsheet_id, result_folder_id)
+    spreadsheet_id = _create_spreadsheet(drive_service, sheet_title, result_folder_id)
+
+    spreadsheet = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = spreadsheet["sheets"][0]["properties"]["sheetId"]
+    current_title = spreadsheet["sheets"][0]["properties"]["title"]
+    if current_title != "주식변동이력":
+        sheet_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={
+                "requests": [
+                    {
+                        "updateSheetProperties": {
+                            "properties": {"sheetId": sheet_id, "title": "주식변동이력"},
+                            "fields": "title",
+                        }
+                    }
+                ]
+            },
+        ).execute()
 
     values = _sheet_values_from_rows(merged_rows, columns)
     sheet_service.spreadsheets().values().update(
@@ -526,8 +542,6 @@ def run_drive_register(
         body={"values": values},
     ).execute()
 
-    spreadsheet = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet_id = spreadsheet["sheets"][0]["properties"]["sheetId"]
     preferred_col_idx = columns.index("우선주식")
     _apply_sheet_formats(sheet_service, spreadsheet_id, sheet_id, red_row_indexes, company_breaks, preferred_col_idx)
 
